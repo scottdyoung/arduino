@@ -4,11 +4,14 @@
   #include <avr/power.h>
 #endif
 
-#define OUTER_LIGHTS_PIN      6
-#define INNER_LIGHTS_PIN      4
-#define OUTER_LIGHTS          60
-#define INNER_LIGHTS          150
+#define OUTER_LIGHTS_PIN      4
+#define INNER_LIGHTS_PIN      6
+#define OUTER_LIGHTS          150
+#define INNER_LIGHTS          60
 #define SECONDS_UNTIL_EVENT   2
+#define COLOR_MAX_ONE_THIRD   85
+#define COLOR_MAX_TWO_THIRD   170
+#define COLOR_MAX             255
 
 Adafruit_NeoPixel innerLights = Adafruit_NeoPixel(INNER_LIGHTS, INNER_LIGHTS_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel outerLights = Adafruit_NeoPixel(OUTER_LIGHTS, OUTER_LIGHTS_PIN, NEO_GRB + NEO_KHZ800);
@@ -17,6 +20,9 @@ Adafruit_NeoPixel outerLights = Adafruit_NeoPixel(OUTER_LIGHTS, OUTER_LIGHTS_PIN
 const int relayPin = 2;
 const int buttonPin = 13;
 const int sensorPin = A4;
+
+int currentOuterColor = 0;
+int currentLed = 0;
 
 long pressureStartTime = 0;
 
@@ -32,8 +38,8 @@ void setup() {
     pinMode(sensorPin, INPUT);
     pinMode(relayPin, OUTPUT); 
     pinMode(buttonPin, INPUT);
-    initializeLights(innerLights, innerLights.Color(0, 0, 150));
-    initializeLights(outerLights, outerLights.Color(0, 150, 0));
+    initializeLights(innerLights, innerLights.Color(COLOR_MAX, COLOR_MAX, COLOR_MAX));
+    initializeLights(outerLights, outerLights.Color(0, 0, COLOR_MAX));
 }
 
 void initializeLights(Adafruit_NeoPixel& lights, uint32_t color) {
@@ -51,7 +57,7 @@ void loop(){
             openRelay();
             delay(50);
         } else if (isPressedLongEnough(now)) {
-            changeColor(innerLights, innerLights.Color(150, 0 , 0));  
+            changeColor(innerLights, innerLights.Color(COLOR_MAX, 0 , 0));  
         }
         innerLights.show();
     } else {
@@ -61,7 +67,35 @@ void loop(){
         pressureStartTime = now;
         outerLights.show();
     }
+
+
+    
+    for (int i=0; i < outerLights.numPixels(); i=i+1) {
+        outerLights.setPixelColor(i, getPixelColor(outerLights, (i+currentOuterColor) % COLOR_MAX)); 
+    }
+    outerLights.show();
+    currentOuterColor = (currentOuterColor + 1)  % COLOR_MAX;
+    delay(15);
 } 
+
+uint32_t getPixelColor(Adafruit_NeoPixel& lights, byte color) {
+    color = COLOR_MAX - color;
+    if(color < COLOR_MAX_ONE_THIRD) {
+        return lights.Color(getMappingColor(51, COLOR_MAX, color), 0, 0);
+    }
+    if(color < COLOR_MAX_TWO_THIRD) {
+        color = color - COLOR_MAX_ONE_THIRD;
+        return lights.Color(getMappingColor(102, COLOR_MAX, color), getMappingColor(25, 50, color), 0);
+    }
+    color = color - COLOR_MAX_TWO_THIRD;
+    return lights.Color(getMappingColor(0, 25, color), getMappingColor(0, 25, color), getMappingColor(0, 25, color));
+}
+
+int getMappingColor(int low, int high, int current) {
+    int range = high - low;
+    double percent = (float) current/ (float) COLOR_MAX_ONE_THIRD;
+    return percent * range + low;
+}
 
 boolean isPressedLongEnough(long now) {
   return (now - pressureStartTime) >= SECONDS_UNTIL_EVENT;
